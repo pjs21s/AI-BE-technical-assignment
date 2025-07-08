@@ -23,5 +23,5 @@ async def infer(candidate: Candidate):
         raw = call_llm(prompt)
     except Exception as e:
         raise AppError(502, "LLM_ERROR", f"LLM 호출 실패: {e}")
-    
+
     return postprocess(raw)

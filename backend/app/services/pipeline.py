@@ -63,19 +63,42 @@ def retrieve_context(text: str, db_conn) -> List[str]:
         return [row[0] for row in cursor.fetchall()]
 
 
-def build_prompt(candidate: Candidate, contexts: List[str]) -> str:
-    intro = (
-        "지원자 정보와, 관련 경험 리스트가 주어집니다.\n"
-        "아래 리스트를 참고해 이 지원자가 가진 경험 태그와 그 증거를\n"
-        "JSON 포맷으로 반환해주세요,\n\n"
-    )
-    ctx_block = "\n".join(f"- {c}" for c in contexts)
-    return (
-        intro
-        + f"지원자 전처리 텍스트:\n{preprocess(candidate)}\n\n"
-        + F"경험 리스트:\n{ctx_block}\n\n"
-        + "결과:"
-    )
+_TAG_LIST = [
+    "상위권대학교", "대규모 회사 경험", "성장기 스타트업 경험", "리더쉽",
+    "대용량데이터처리경험", "IPO", "M&A 경험", "신규 투자 유치 경험",
+]
+
+def build_prompt(candidate: Candidate, contexts: list[str]) -> str:
+    ctx_block = "\n".join(f"- {c}" for c in contexts) or "(관련 회사 정보 없음)"
+
+    return f"""\
+            당신은 HR 평가 모델입니다.
+
+            ### 후보 요약
+            {preprocess(candidate)}
+
+            ### 관련 회사/조직 정보
+            {ctx_block}
+
+            ### 지침
+            1. **태그 목록** 중 해당되는 것만 최대 7개까지 골라라.
+            2. 태그는 **중복 없이** 한 번만 사용한다.
+            3. 각 태그마다 50자 이하의 증거 문장을 제시한다.
+            4. 출력은 **JSON 배열**이며, 각 원소는 `"tag"`, `"evidence"` 두 키만 가진다.
+            5. 목록에 없는 새로운 태그를 만들지 마라.
+
+            태그 목록: {', '.join(_TAG_LIST)}
+
+            ### 출력 예시
+            {{
+                "tags": [
+                    {{ "tag": "상위권대학교", "evidence": "연세대학교 (학사, 컴퓨터 공학)" }},
+                    ...
+                ]
+            }}
+
+            ### 너의 답변 (위 형식 그대로):
+            """
 
 
 def call_llm(prompt: str) -> str:
