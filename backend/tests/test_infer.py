@@ -2,9 +2,14 @@ import json
 import os
 import pytest
 from fastapi.testclient import TestClient
-from backend.main import app
+from backend.app.main import app
 
 client = TestClient(app)
+
+@pytest.fixture(autouse=True)
+def disable_db(monkeypatch):
+    # retrieve_context가 DB를 호출하지 않도록 빈 리스트 반환
+    monkeypatch.setattr("backend.app.services.pipeline.retrieve_context", lambda text, db_conn: [])
 
 @pytest.fixture
 def sample_candidate():
@@ -27,7 +32,6 @@ def test_infer_success(sample_candidate, monkeypatch):
     response = client.post("/infer", json=sample_candidate)
     assert response.status_code == 200
     data = response.json()
-    print(data)
     assert data["tags"][0]["tag"] == "상위권대학교"
 
 def test_infer_invalid_payload():
