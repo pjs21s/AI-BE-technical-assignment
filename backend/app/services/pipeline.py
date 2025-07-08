@@ -8,59 +8,76 @@ from ..models.candidate import Candidate
 
 
 def preprocess(candidate: Candidate) -> str:
-    lines = []
+    lines: list[str] = []
 
-    # 1. 헤드라인/요약
-    if candidate.headline:
-        lines.append(f"헤드라인: {candidate.headline}")
-    if candidate.summary:
-        lines.append(f"요약: {candidate.summary}")
-
-    # 2. 학력
-    edu = candidate.educations[0]
-    school = edu.schoolName or ""
-    degree = edu.degreeName or ""
-    field = edu.fieldOfStudy or ""
-    if school:
-        lines.append(f"학력: {school} ({degree}, {field})")
-
-    # 3. 주요 스킬
-    if candidate.skills:
-        skills = ", ".join(candidate.skills)
-        lines.append(f"주요 스킬: {skills}")
-
-    # 4. 포지션별 상세 이력
-    for p in candidate.positions:
-        # 기간
-        sd = p.startEndDate.get("start", {})
-        ed = p.startEndDate.get("end", {})
-        start = f"{sd.get('year')}-{sd.get('month'):02d}" if sd else "?"
-        end = f"{ed.get('year')}-{ed.get('month'):02d}" if ed else "현재"
-        # 회사/직무/지역/팀 규모 키워드
-        desc = p.description.replace("\n", " ")  # 한 줄로
+    # 학력
+    for edu in candidate.educations:
         lines.append(
-            f"[{start} ~ {end}] {p.companyName} - {p.title} @ {p.companyLocation}\n"
-            f"  설명: {desc}"
+            f"[EDU] {edu.schoolName} ({edu.degreeName} · {edu.fieldOfStudy})"
         )
+
+    # 경력
+    for p in candidate.positions:
+        sd = p.startEndDate.get('start', {})
+        start = f"{sd['year']}.{sd['month']:02d}"
+        ed = p.startEndDate.get('end', {})
+        end = f"{ed['year']}.{ed['month']:02d}" if ed else "현재"
+
+        lines.append(
+            "[EXP]\n"
+            f"  회사(companyName): {p.companyName}\n"
+            f"  직책(title): {p.title}\n"
+            f"  기간(period): {start}–{end}\n"
+            f"  지역(location): {p.companyLocation}\n"
+            f"  설명(description): {p.description}"
+        )
+
+    # 스킬 / 요약
+    if candidate.skills:
+        lines.append(f"[SKILLS] {', '.join(candidate.skills)}")
+    if candidate.summary:
+        lines.append(f"[SUMMARY] {candidate.summary}")
 
     return "\n".join(lines)
 
 
-def retrieve_context(text: str, db_conn) -> List[str]:
-    with db_conn.cursor() as cursor:
-        embedding_response = openai.embeddings.create(input=[text], model="text-embedding-3-small")
-        query_vector = embedding_response.data[0].embedding
+def extract_company_names_from_text(candidate: Candidate) -> list[str]:
+    return [p.companyName for p in candidate.positions]
 
+
+def retrieve_context(text: str,  company_names: list[str], db_conn) -> List[str]:
+    query_vector = openai.embeddings.create(
+        input=[text], model="text-embedding-3-small"
+    ).data[0].embedding
+
+    with db_conn.cursor() as cursor:
         cursor.execute(
             """
             SELECT summary_text
             FROM company
             WHERE embedding IS NOT NULL
+                AND name = ANY(%s)
             ORDER BY embedding <=> %s::vector
             LIMIT 5;
-            """, (query_vector,)
+            """, (company_names, query_vector,)
         )
-        return [row[0] for row in cursor.fetchall()]
+        summaries = [row[0] for row in cursor.fetchall()]
+
+        cursor.execute(
+            """
+            SELECT title
+            FROM company_news
+            WHERE company_id IN (
+                SELECT id FROM company WHERE name = ANY(%s::text[])
+            )
+                AND news_date >= CURRENT_DATE - INTERVAL '180 days'
+            ORDER BY embedding <=> %s::vector
+            LIMIT 10
+            """,
+            (company_names, query_vector),
+        )
+        news_titles = [row[0] for row in cursor.fetchall()]
+        return summaries + news_titles
 
 
 _TAG_LIST = [
@@ -72,12 +89,22 @@ def build_prompt(candidate: Candidate, contexts: list[str]) -> str:
     ctx_block = "\n".join(f"- {c}" for c in contexts) or "(관련 회사 정보 없음)"
 
     return f"""\
-            당신은 HR 평가 모델입니다.
+            당신은 다음 JSON 파싱 결과(아래 '지원자 전처리 텍스트')를 읽고,
+            미리 정의된 경험 태그를 선택해 evidence 와 함께 반환합니다.
+
+            전처리 텍스트 규칙
+            [EDU] …          → 학력
+            [EXP] …          → 경력
+            └ companyName / title / period / location / description
+            [SKILLS] …       → 보유 스킬
+            [SUMMARY] …      → 이력 요약
+
+            증거(evidence)는 가능하면 description 안의 구체적 문구(투자 금액·M&A·조직 10→45명 등)를 그대로 포함하십시오.
 
             ### 후보 요약
             {preprocess(candidate)}
 
-            ### 관련 회사/조직 정보
+            ### 관련 회사/조직 정보/최근 180일 뉴스 정보
             {ctx_block}
 
             ### 지침
@@ -85,7 +112,6 @@ def build_prompt(candidate: Candidate, contexts: list[str]) -> str:
             2. tag는 **중복 없이** 한 번만 사용한다.
             3. 각 tag마다 50자 이하의 evidence 문장을 제시한다.
             4. 출력은 **JSON 배열**이며, 각 원소는 `"tag"`, `"evidence"` 두 키만 가진다.
-            5. 목록에 없는 새로운 tag를 만들지 마라.
 
             태그 목록: {', '.join(_TAG_LIST)}
 
@@ -97,7 +123,12 @@ def build_prompt(candidate: Candidate, contexts: list[str]) -> str:
                 ]
             }}
 
-            ### 너의 답변 (위 형식 그대로):
+            ### 반환 규칙
+            - "tag": 미리 정의된 태그 중 하나
+            - "evidence": 해당 태그를 뒷받침하는 가장 핵심적인 한 문장
+                · 예) "토스 시리즈 F 2,060억 투자 유치 지원"
+                · 같은 태그가 여러 회사에서 관찰되면 '; '로 구분
+            - 동일 태그가 중복되지 않도록 합니다.
             """
 
 
