@@ -1,12 +1,16 @@
 #!/usr/bin/env python
 import os
+import sys
 import csv
 import logging
+import openai
 from datetime import datetime
 
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
+from dotenv import load_dotenv
+load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -14,14 +18,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# OpenAI API 키
+openai.api_key = os.getenv("OPENAI_API_KEY")
+if not openai.api_key:
+    logger.error("OPENAI_API_KEY 환경변수가 필요합니다.")
+    exit(1)
 
 # 데이터베이스 연결 정보
 DB_CONFIG = {
-    "host": "localhost",
-    "port": 5432,
-    "user": os.getenv("POSTGRES_USER", "searchright"),
-    "password": os.getenv("POSTGRES_PASSWORD", "searchright"),
-    "database": os.getenv("POSTGRES_DB", "searchright"),
+    "host": os.getenv("DB_HOST"),
+    "port": os.getenv("DB_PORT"),
+    "user": os.getenv("POSTGRES_USER"),
+    "password": os.getenv("POSTGRES_PASSWORD"),
+    "database": os.getenv("POSTGRES_DB"),
 }
 
 
@@ -70,9 +79,17 @@ def create_company_news_table(conn):
                         title VARCHAR(1000) NOT NULL,
                         original_link TEXT,
                         news_date DATE NOT NULL,
+                        embedding VECTOR(1536),
                         FOREIGN KEY (company_id) REFERENCES company(id) ON DELETE CASCADE
                     );
                 """
+                )
+                # embedding 컬럼
+                cursor.execute(
+                    """
+                    ALTER TABLE company_news
+                    ADD COLUMN IF NOT EXISTS embedding VECTOR(1536);
+                    """
                 )
                 logger.info("company_news 테이블이 성공적으로 생성되었습니다.")
             else:
@@ -168,17 +185,29 @@ def insert_news_data(conn, news_data, company_map):
                     skipped_count += 1
                     continue
 
+                # embedding 생성 (title 중심)
+                try:
+                    response = openai.embeddings.create(
+                        input=[news['title']],
+                        model='text-embedding-3-small'
+                    )
+                    embedding = response.data[0].embedding
+                except Exception as e:
+                    logger.error(f"임베딩 생성 실패: {e}")
+                    sys.exit(1)
+
                 # 데이터 삽입
                 cursor.execute(
                     """
-                    INSERT INTO company_news (company_id, title, original_link, news_date) 
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO company_news (company_id, title, original_link, news_date, embedding) 
+                    VALUES (%s, %s, %s, %s, %s::vector)
                     """,
                     (
                         company_id,
                         news["title"],
                         news["original_link"],
                         news["news_date"],
+                        embedding
                     ),
                 )
                 inserted_count += 1
