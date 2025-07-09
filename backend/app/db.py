@@ -1,6 +1,6 @@
 import psycopg2
 from contextlib import contextmanager
-from .config import settings
+from backend.app.config import settings
 
 @contextmanager
 def get_db_connection():

@@ -1,10 +1,9 @@
 from typing import List
-import openai
-from ..config import settings
 
-openai.api_key = settings.openai_api_key
-
-from ..models.candidate import Candidate
+from backend.app.models.candidate import Candidate
+from backend.app.clients.openai_client import chat_completion, embedding
+from backend.app.exceptions import AppError
+from backend.app.error_codes import Err
 
 
 def preprocess(candidate: Candidate) -> str:
@@ -46,9 +45,7 @@ def extract_company_names_from_text(candidate: Candidate) -> list[str]:
 
 
 def retrieve_context(text: str,  company_names: list[str], db_conn) -> List[str]:
-    query_vector = openai.embeddings.create(
-        input=[text], model="text-embedding-3-small"
-    ).data[0].embedding
+    query_vector = embedding(input=[text], model="text-embedding-3-small")
 
     with db_conn.cursor() as cursor:
         cursor.execute(
@@ -129,16 +126,18 @@ def build_prompt(candidate: Candidate, contexts: list[str]) -> str:
 
 
 def call_llm(prompt: str) -> str:
-    response = openai.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"},
-        temperature=0.2,
-        max_tokens=400,
-        presence_penalty=0.2,
-        frequency_penalty=0.4
-    )
-    return response.choices[0].message.content
+    try:
+        return chat_completion(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            max_tokens=400,
+            presence_penalty=0.2,
+            frequency_penalty=0.4
+        )
+    except Exception as e:
+        raise AppError(Err.LLM_ERROR, f"OpenAI 호출 실패: {e}")
 
 
 def postprocess(raw: str):

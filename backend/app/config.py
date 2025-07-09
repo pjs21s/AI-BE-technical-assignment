@@ -3,6 +3,11 @@ from pydantic import Field
 
 class Settings(BaseSettings):
     openai_api_key: str = Field(..., env='OPENAI_API_KEY')
+    openai_timeout: float = 15.0          # 초
+    openai_max_retries: int = 4
+    openai_backoff_min: float = 0.5       # s
+    openai_backoff_max: float = 4.0
+    
     database_url: str = Field(..., env='DATABASE_URL')
     db_host: str = Field(..., env='DB_HOST')
     db_port: int = Field(..., env='DB_PORT')

@@ -1,11 +1,11 @@
 
 from fastapi import FastAPI
-from .db import get_db_connection
-from .models.candidate import Candidate
-from .models.response import InferenceResult
-from .services.pipeline import preprocess, retrieve_context, build_prompt, call_llm, postprocess, extract_company_names_from_text
-from .exceptions import AppError, http_error_handler, validation_error_handler
-from .error_codes import Err
+from backend.app.db import get_db_connection
+from backend.app.models.candidate import Candidate
+from backend.app.models.response import InferenceResult
+from backend.app.services.pipeline import preprocess, retrieve_context, build_prompt, call_llm, postprocess, extract_company_names_from_text
+from backend.app.exceptions import AppError, http_error_handler, validation_error_handler
+from backend.app.error_codes import Err
 
 app = FastAPI(title="My LLM API", version="0.1.0")
 
