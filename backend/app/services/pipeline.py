@@ -82,62 +82,61 @@ def retrieve_context(text: str,  company_names: list[str], db_conn) -> List[str]
 
 _TAG_LIST = [
     "상위권대학교", "대규모 회사 경험", "성장기 스타트업 경험", "리더쉽",
-    "대용량데이터처리경험", "IPO", "M&A 경험", "신규 투자 유치 경험",
+    "대용량 데이터 처리 경험", "IPO", "M&A 경험", "신규 투자 유치 경험",
 ]
 
 def build_prompt(candidate: Candidate, contexts: list[str]) -> str:
     ctx_block = "\n".join(f"- {c}" for c in contexts) or "(관련 회사 정보 없음)"
 
-    return f"""\
-            당신은 다음 JSON 파싱 결과(아래 '지원자 전처리 텍스트')를 읽고,
-            미리 정의된 경험 태그를 선택해 evidence 와 함께 반환합니다.
+    tag_list_block = "\n".join(f"- {t}" for t in _TAG_LIST)
 
-            전처리 텍스트 규칙
-            [EDU] …          → 학력
-            [EXP] …          → 경력
-            └ companyName / title / period / location / description
-            [SKILLS] …       → 보유 스킬
-            [SUMMARY] …      → 이력 요약
+    return f"""
+        당신은 HR 분석 전문가입니다. 아래 **지원자 전처리 텍스트**와
+        보조 **컨텍스트**(회사·뉴스)를 참고하여 ‘경험 tag–evidence’를 추출하십시오.
 
-            증거(evidence)는 가능하면 description 안의 구체적 문구(투자 금액·M&A·조직 10→45명 등)를 그대로 포함하십시오.
+        ### 지원자 전처리 텍스트
+        {preprocess(candidate)}
+        ### 컨텍스트 (회사/뉴스, 최근 180 일)
+        {ctx_block}
+        ### tag-evidence 규칙
+        1. 리더쉽 tag에 대한 evidence는 [EXP] 내 직책(title)을 기반으로 추론하여 활용
 
-            ### 후보 요약
-            {preprocess(candidate)}
+        **규칙**
+        1. 선택 가능한 태그 ↓  
+        {tag_list_block}
 
-            ### 관련 회사/조직 정보/최근 180일 뉴스 정보
-            {ctx_block}
+        2. **증거(evidence) 문장은 지원자 전처리 텍스트에 존재하는 내용을
+        그대로 인용**(필요시 동일 문장 일부만 잘라 사용).  
+        - 컨텍스트는 *tag 판단* 참고용이지만, 인용 문장으로 쓰지 마십시오.
 
-            ### 지침
-            1. **_TAG_LIST** 중 해당되는 것만 최대 7개까지 골라라.
-            2. tag는 **중복 없이** 한 번만 사용한다.
-            3. 각 tag마다 50자 이하의 evidence 문장을 제시한다.
-            4. 출력은 **JSON 배열**이며, 각 원소는 `"tag"`, `"evidence"` 두 키만 가진다.
+        3. 동일 tag가 여러 번 나타나면 **중복 tag를 작성하지 말고**  
+        가장 강력한 1~2개 문장을 ‘; ’ 로 연결해 하나의 evidence 로 제시합니다.
 
-            태그 목록: {', '.join(_TAG_LIST)}
+        4. 각 evidence 는 최대 60자(번역 시 포함)  
+        - 영어 원문만 있으면 한국어 번역 후 인용.
 
-            ### 출력 예시
-            {{
-                "tags": [
-                    {{ "tag": "상위권대학교", "evidence": "연세대학교 (학사, 컴퓨터 공학)" }},
-                    ...
-                ]
-            }}
+        5. 최종 출력은 **아래 JSON 형식 한 개**만 반환하며,
+        불필요한 설명·주석을 포함하지 마십시오.
 
-            ### 반환 규칙
-            - "tag": 미리 정의된 태그 중 하나
-            - "evidence": 해당 태그를 뒷받침하는 가장 핵심적인 한 문장
-                · 예) "토스 시리즈 F 2,060억 투자 유치 지원"
-                · 같은 태그가 여러 회사에서 관찰되면 '; '로 구분
-            - 동일 태그가 중복되지 않도록 합니다.
-            """
+        ```json
+        {{
+        "tags": [
+            {{ "tag": "상위권대학교", "evidence": "서울대학교 (석사·컴퓨터공학)" }},
+            ...
+        ]
+        }}
+        """
 
 
 def call_llm(prompt: str) -> str:
     response = openai.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"},
         temperature=0.2,
-        max_tokens=512,
+        max_tokens=400,
+        presence_penalty=0.2,
+        frequency_penalty=0.4
     )
     return response.choices[0].message.content
 
