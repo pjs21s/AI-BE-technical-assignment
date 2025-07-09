@@ -13,7 +13,7 @@ class Education(BaseModel):
     schoolName: str = Field(..., example="연세대학교", description="대학교 이름")
     degreeName: Optional[str] = Field(..., example="학사", description="학/석/박사 표기")
     fieldOfStudy: Optional[str] = Field(..., example="컴퓨터 공학", description="공부한 분야")
-    startEndDate: Optional[dict] = Field(..., description="재학 기간")
+    startEndDate: Optional[str] = Field(..., description="재학 기간")
     description: Optional[str] = Field(..., description="기타 설명")
 
 
