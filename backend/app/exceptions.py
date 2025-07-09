@@ -1,10 +1,14 @@
+from .error_codes import Err
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 
 class AppError(HTTPException):
-    def __init__(self, status_code: int, code: str, message: str):
-        super().__init__(status_code=status_code, detail={"code": code, "message": message})
-    
+    def __init__(self, err: Err, message: str | None = None):
+        super().__init__(
+            status_code=err.value.http,
+            detail={"code": err.name,
+                    "message": message or err.value.default_msg}
+        )
 
 def http_error_handler(request: Request, exc: AppError):
     return JSONResponse(status_code=exc.status_code, content=exc.detail)
