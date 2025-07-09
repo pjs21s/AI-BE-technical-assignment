@@ -1,5 +1,6 @@
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Body
+import json, pathlib
 from backend.app.db import get_db_connection
 from backend.app.models.candidate import Candidate
 from backend.app.models.response import InferenceResult
@@ -12,8 +13,13 @@ app = FastAPI(title="My LLM API", version="0.1.0")
 app.add_exception_handler(AppError, http_error_handler)
 app.add_exception_handler(Exception, validation_error_handler)
 
+EXAMPLE_PATH = pathlib.Path(__file__).parent / "examples" / "sample_candidate.json"
+sample_candidate = json.loads(EXAMPLE_PATH.read_text(encoding="utf-8"))
+
 @app.post("/infer", response_model=InferenceResult)
-def infer(candidate: Candidate):
+def infer(candidate: Candidate = Body(
+    example=sample_candidate
+)):
     text = preprocess(candidate)
     company_names = extract_company_names_from_text(candidate)
     with get_db_connection() as conn:
