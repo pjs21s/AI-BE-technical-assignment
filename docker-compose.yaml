@@ -1,6 +1,7 @@
+version: "3.9"
+
 services:
 
-  # 웹서버, nginx
   nginx:
     image: nginx:alpine
     hostname: searchright-nginx
@@ -15,18 +16,47 @@ services:
       TZ: Asia/Seoul
     depends_on:
       - postgres
+      - redis
 
-  # pgvector가 포함된 PostgreSQL 이미지
   postgres:
     image: ankane/pgvector:latest
     hostname: searchright-psql
     container_name: searchright-psql
     restart: always
-    ports:
-      - "5432:5432"
+    ports: ["5432:5432"]
     environment:
-      POSTGRES_USER: searchright
+      POSTGRES_USER:     searchright
       POSTGRES_PASSWORD: searchright
-      POSTGRES_DB: searchright
+      POSTGRES_DB:       searchright
     volumes:
       - ./postgresql/data/:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    hostname: searchright-redis
+    container_name: searchright-redis
+    restart: unless-stopped
+    ports: ["6379:6379"]
+    volumes:
+      - ./redis/data:/data               # (선택) 지속 저장
+    command: ["redis-server", "--save", "900", "1", "--loglevel", "warning"]
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile   # ← 경로 명시
+    container_name: searchright-backend
+    command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./:/app
+    ports: ["8000:8000"]
+    environment:
+      TZ: Asia/Seoul
+      OPENAI_API_KEY:   ${OPENAI_API_KEY}
+      DATABASE_URL:     postgresql://searchright:searchright@postgres:5432/searchright
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB:   0
+    depends_on:
+      - postgres
+      - redis

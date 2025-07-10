@@ -1,6 +1,6 @@
 import openai, logging
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
-from backend.app.config import settings
+from backend.app.configs import settings
 
 log = logging.getLogger(__name__)
 openai.api_key = settings.openai_api_key

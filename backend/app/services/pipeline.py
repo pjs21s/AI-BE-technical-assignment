@@ -1,11 +1,14 @@
 from typing import List
 
 from backend.app.models.candidate import Candidate
-from backend.app.clients.openai_client import chat_completion, embedding
+from backend.app.clients.openai_client import chat_completion
 from backend.app.exceptions import AppError
 from backend.app.error_codes import Err
+from backend.app.clients.embed_cache import get_cached_embedding
+from backend.app.utils.profiler import timed
 
 
+@timed("⏱ preprocess")
 def preprocess(candidate: Candidate) -> str:
     lines: list[str] = []
 
@@ -39,13 +42,13 @@ def preprocess(candidate: Candidate) -> str:
 
     return "\n".join(lines)
 
-
+@timed("⏱ extract_company_names_from_text")
 def extract_company_names_from_text(candidate: Candidate) -> list[str]:
     return [p.companyName for p in candidate.positions]
 
-
+@timed("⏱ retrieve_context")
 def retrieve_context(text: str,  company_names: list[str], db_conn) -> List[str]:
-    query_vector = embedding(input=[text], model="text-embedding-3-small")
+    query_vector = get_cached_embedding(text)
 
     with db_conn.cursor() as cursor:
         cursor.execute(
@@ -82,6 +85,7 @@ _TAG_LIST = [
     "대용량 데이터 처리 경험", "IPO", "M&A 경험", "신규 투자 유치 경험",
 ]
 
+@timed("⏱ build_prompt")
 def build_prompt(candidate: Candidate, contexts: list[str]) -> str:
     ctx_block = "\n".join(f"- {c}" for c in contexts) or "(관련 회사 정보 없음)"
 
@@ -124,7 +128,7 @@ def build_prompt(candidate: Candidate, contexts: list[str]) -> str:
         }}
         """
 
-
+@timed("⏱ call_llm")
 def call_llm(prompt: str) -> str:
     try:
         return chat_completion(
@@ -139,7 +143,7 @@ def call_llm(prompt: str) -> str:
     except Exception as e:
         raise AppError(Err.LLM_ERROR, f"OpenAI 호출 실패: {e}")
 
-
+@timed("⏱ postprocess")
 def postprocess(raw: str):
     from ..models.response import InferenceResult
     return InferenceResult.model_validate_json(raw)

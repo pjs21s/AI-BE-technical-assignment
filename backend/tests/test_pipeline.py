@@ -1,5 +1,4 @@
 import json
-import types
 import pathlib
 import pytest
 
@@ -51,11 +50,8 @@ class FakeConn:
 
 def test_retrieve_context(monkeypatch, sample_candidate):
     monkeypatch.setattr(
-        pipeline,
-        "embedding",
-        lambda input, model: types.SimpleNamespace(
-            data=[types.SimpleNamespace(embedding=[0.1, 0.2])]
-        ),
+        "backend.app.services.pipeline.get_cached_embedding",
+        lambda *a, **kw: [0.1, 0.2]
     )
     cand_obj = pipeline.Candidate.model_validate(sample_candidate)
     txt = pipeline.preprocess(cand_obj)

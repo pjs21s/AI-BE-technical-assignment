@@ -1,5 +1,6 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+
 
 class Settings(BaseSettings):
     openai_api_key: str = Field(..., env='OPENAI_API_KEY')
@@ -15,9 +16,11 @@ class Settings(BaseSettings):
     postgres_password: str = Field(..., env='POSTGRES_PASSWORD')
     postgres_db: str = Field(..., env='POSTGRES_DB')
 
-    model_config = {
-        'env_file': '.env',
-        'env_file_encoding': 'utf-8'
-    }
+    redis_host: str = Field(..., env='REDIS_HOST')
+    redis_port: str = Field(..., env='REDIS_PORT')
+    redis_db: str = Field(..., env='REDIS_DB')
+    redis_password: str = Field(..., env='REDIS_PASSWORD')
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 settings = Settings()
