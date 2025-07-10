@@ -64,7 +64,20 @@ AI-BE-technical-assignment/
 poetry install
 ```
 
-2) .env 수정 (4번 환경 변수 참고)
+2) .env 수정
+```
+OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+DATABASE_URL=postgres://searchright:searchright@localhost/searchright
+DB_HOST=localhost
+DB_PORT=5432
+POSTGRES_USER=searchright
+POSTGRES_PASSWORD=searchright
+POSTGRES_DB=searchright
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=
+```
 
 3) docker compose 사용, 이미지 빌드 및 컨테이너 실행
 
@@ -95,22 +108,7 @@ http://127.0.0.1:8000/docs
 
 예시 데이터가 세팅되어 있으므로 별도로 데이터를 넣지 않아도 바로 테스트해볼 수 있습니다.
 
-## 4. 환경 변수
-```
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-DATABASE_URL=postgres://searchright:searchright@localhost/searchright
-DB_HOST=localhost
-DB_PORT=5432
-POSTGRES_USER=searchright
-POSTGRES_PASSWORD=searchright
-POSTGRES_DB=searchright
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_DB=0
-REDIS_PASSWORD=
-```
-
-## 5. 테이블 구조
+## 4. 테이블 구조
 
 ### `company`
 
@@ -134,7 +132,7 @@ REDIS_PASSWORD=
 | embedding    | VECTOR(1536)    | –                                             | 제목 임베딩                       |
 
 
-## 6. API 정의
+## 5. API 정의
 `POST /v1/infer`
 
 성공 (200) InferenceResult
@@ -151,13 +149,13 @@ REDIS_PASSWORD=
 }
 ```
 
-## 7. 테스트
+## 6. 테스트
 
 ```
 pytest -q
 ```
 
-## 8. TODO
+## 7. TODO
 1. 정교한 성능 측정 및 최적화
 2. fine tuning 위한 라벨링 및 평가 시스템 도입
 3. 벡터 검색에 대한 인덱스 추가
