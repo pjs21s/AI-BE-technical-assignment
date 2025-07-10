@@ -1,6 +1,8 @@
+import json
+
 from fastapi import APIRouter, Body
 from pathlib import Path
-import json
+
 from backend.app.db import get_db_connection
 from backend.app.models.candidate import Candidate
 from backend.app.models.response import InferenceResult
@@ -14,7 +16,7 @@ BASE_DIR = Path(__file__).resolve().parents[2]   # 0: v1, 1: apis, 2: app
 EXAMPLE_PATH = BASE_DIR / "examples" / "sample_candidate.json"
 sample_candidate = json.loads(EXAMPLE_PATH.read_text(encoding="utf-8"))
 
-@router.post("/infer", response_model=InferenceResult, summary="LLM 태깅 추론")
+@router.post("", response_model=InferenceResult, summary="LLM 태깅 추론")
 def infer(candidate: Candidate = Body(example=sample_candidate)):
     text = preprocess(candidate)
     company_names = extract_company_names_from_text(candidate)

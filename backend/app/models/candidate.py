@@ -1,6 +1,7 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
+
 class Position(BaseModel):
     title: str = Field(..., example="CTO", description="직책")
     companyName: str = Field(..., example="비바리퍼블리카", description="회사 이름")

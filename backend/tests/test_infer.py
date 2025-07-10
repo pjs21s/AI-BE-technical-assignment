@@ -1,15 +1,20 @@
 import json
 import os
 import pytest
+import types
+from starlette import status
+
 from fastapi.testclient import TestClient
 from backend.app.main import app
+from backend.app.services import pipeline
+from backend.app.clients import openai_client
 
 client = TestClient(app)
 
+
 @pytest.fixture(autouse=True)
 def disable_db(monkeypatch):
-    # retrieve_context가 DB를 호출하지 않도록 빈 리스트 반환
-    monkeypatch.setattr("backend.app.services.pipeline.retrieve_context", lambda text, db_conn: [])
+    monkeypatch.setattr(pipeline, "retrieve_context", lambda *_a, **_kw: ["(관련 맥락 없음)"])
 
 @pytest.fixture
 def sample_candidate():
@@ -19,21 +24,29 @@ def sample_candidate():
         return json.load(f)
     
 def test_infer_success(sample_candidate, monkeypatch):
-    def fake_create(*args, **kwargs):
-        class Choice:
-            message = type("M", (), {"content": json.dumps({
-                "tags": [
-                    {"tag": "상위권대학교", "evidence": "연세대학교"}
-                ]
-            })})
-        return type("R", (), {"choices": [Choice()]})
-    monkeypatch.setattr("openai.chat.completions.create", fake_create)
+    fake_resp = types.SimpleNamespace(
+        choices=[
+            types.SimpleNamespace(
+                message=types.SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "tags": [
+                                {"tag": "상위권대학교", "evidence": "연세대학교"}
+                            ]
+                        }
+                    )
+                )
+            )
+        ]
+    )
+    monkeypatch.setattr(openai_client, "chat_completion", lambda **kw: fake_resp)
 
-    response = client.post("/infer", json=sample_candidate)
-    assert response.status_code == 200
+    response = client.post("/api/infer", json=sample_candidate)
+    assert response.status_code == status.HTTP_200_OK
+
     data = response.json()
     assert data["tags"][0]["tag"] == "상위권대학교"
 
 def test_infer_invalid_payload():
-    response = client.post("/infer", json={"foo": "bar"})
-    assert response.status_code == 422
+    response = client.post("/api/infer", json={"foo": "bar"})
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY

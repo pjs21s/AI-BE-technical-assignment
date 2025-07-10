@@ -1,4 +1,3 @@
-from __future__ import annotations
 import openai, logging
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from backend.app.config import settings
